@@ -1,7 +1,11 @@
-git clone https://github.com/BishopFox/sliver.git move the script to sliver main folder give execute permissions to script - chmod +x ./sliver_complete_fix.sh run the script ./sliver_complete_fix.sh
+git clone https://github.com/BishopFox/sliver.git move the script to sliver main folder give execute permissions to script - 
+chmod +x ./sliver_complete_fix.sh run the script ./sliver_complete_fix.sh
 --------------------------------------------------------------------------------------------------------------------------------------------------------> after the script is finished running ,it might give compilation error, to fix this simply copy paste these commands and enter ---->
+
 Fix the function definition
+
 find server/cli client/cli -name "*.go" -exec sed -i 's/func CmdExecute(/func Execute(/g' {} +
+
 Also check for any method receivers that might have been renamed
 find server/cli client/cli -name "*.go" -exec sed -i 's/) CmdExecute(/) Execute(/g' {} +
 Verify the fix
