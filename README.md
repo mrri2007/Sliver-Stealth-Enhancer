@@ -25,3 +25,4 @@ else
     echo "✅ SUCCESS - Protobuf signatures successfully modified"
 fi
 ---------------------------------------------------------------------------------------------------------------------------------------------------------->
+last step run the command to compile sliver - make
