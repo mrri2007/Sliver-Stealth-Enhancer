@@ -167,4 +167,18 @@ else
     echo "  3. You can manually edit those files and run 'make' again"
     echo ""
     exit 1
+    
+    sed -i 's/func CmdExecute(/func Execute(/g' server/cli/cli.go
+    sed -i 's/func CmdExecute(/func Execute(/g' client/cli/cli.go
+
+   # Verify the fix
+   grep -n "func Execute()" server/cli/cli.go client/cli/cli.go 
+   server/cli/cli.go:157:func Execute() {
+   client/cli/cli.go:93:func Execute() {
+   if strings sliver-server | grep -q "\.sliverpb\.ScreenshotReq\|\.sliverpb\.ProcessDumpReq\|\.sliverpb\.ImpersonateReq"; then
+    echo "❌ FAILED - Old protobuf signatures still present"
+else
+    echo "✅ SUCCESS - Protobuf signatures successfully modified"
 fi
+
+
