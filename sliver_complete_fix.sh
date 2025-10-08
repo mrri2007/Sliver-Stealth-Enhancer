@@ -1,5 +1,5 @@
 #!/bin/bash
-# Complete Sliver Protobuf Modification Script
+# Complete Sliver Protobuf Modification Script.
 # Clones Sliver and modifies protobuf signatures for evasion
 
 set -e
