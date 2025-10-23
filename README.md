@@ -6,29 +6,6 @@
 
 ---
 
-### ⚠️ After the script finishes
-
-IF it gives a compilation error, fix it by running these commands:
-
-**Fix the function definition:**
-```bash
-find server/cli client/cli -name "*.go" -exec sed -i 's/func CmdExecute(/func Execute(/g' {} +
-```
-
-**Fix method receivers (if renamed):**
-```bash
-find server/cli client/cli -name "*.go" -exec sed -i 's/) CmdExecute(/) Execute(/g' {} +
-```
-
-**Verify the fix:**
-```bash
-grep -n "func Execute()" server/cli/cli.go
-# Output should show something like:
-# 45:func Execute() {
-```
-
----
-
 ### ✅ Check for protobuf signature modification
 
 Run the following all together:
@@ -38,12 +15,5 @@ if strings sliver-server | grep -q ".sliverpb.ScreenshotReq|.sliverpb.ProcessDum
 else
     echo "✅ SUCCESS - Protobuf signatures successfully modified"
 fi
-```
 
----
-
-### 🧱 Final step: Compile Sliver
-
-```bash
-make
 ```
